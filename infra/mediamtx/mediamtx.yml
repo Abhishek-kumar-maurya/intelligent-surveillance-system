@@ -1,0 +1,21 @@
+logLevel: info
+rtsp: true
+rtspAddress: :8554
+hls: true
+hlsAddress: :8888
+hlsAllowOrigins: ['*']
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+webrtcLocalUDPAddress: :8189
+api: true
+apiAddress: :9997
+paths:
+  traffic-001:
+    source: publisher
+  traffic-002:
+    source: publisher
+  traffic-003:
+    source: publisher
+  traffic-004:
+    source: publisher

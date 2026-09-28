@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-okdriver}
+      POSTGRES_USER: ${POSTGRES_USER:-okdriver}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-okdriver} -d ${POSTGRES_DB:-okdriver}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+    ports: ["9000:9000","9001:9001"]
+    volumes: ["miniodata:/data"]
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports: ["8554:8554","8888:8888","8889:8889","8189:8189/udp","9997:9997"]
+    volumes: ["./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro"]
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-okdriver}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-okdriver}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      MEDIAMTX_HLS_BASE_URL: http://localhost:8888
+      MEDIAMTX_WEBRTC_BASE_URL: http://localhost:8889
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+    ports: ["8000:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+      mediamtx: {condition: service_started}
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-okdriver}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-okdriver}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+  frontend:
+    build: ./frontend
+    ports: ["8080:80"]
+    depends_on: [api]
+volumes:
+  pgdata:
+  miniodata:
